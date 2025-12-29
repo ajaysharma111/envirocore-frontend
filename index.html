@@ -1,62 +1,55 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>EnviroCore</title>
-  <link rel="stylesheet" href="styles.css">
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<meta charset="UTF-8">
+<title>EnviroCore</title>
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 
-<div class="header">
-  <h1>🌱 EnviroCore Dashboard</h1>
-  <p>Campus Carbon Monitoring & Sustainability Insights</p>
+<h1>🌱 EnviroCore</h1>
+
+<h2>Login / Signup</h2>
+<input id="email" placeholder="Email">
+<input id="password" type="password" placeholder="Password">
+<button id="loginBtn">Login</button>
+<button id="signupBtn">Sign Up</button>
+<button id="logoutBtn">Logout</button>
+<p id="status">Not logged in</p>
+
+<hr>
+
+<h2>Add Building</h2>
+<input id="name" placeholder="Building name">
+<input id="elec" type="number" placeholder="Electricity">
+<input id="water" type="number" placeholder="Water">
+<input id="paper" type="number" placeholder="Paper">
+<button id="submitBtn" disabled>Add Building</button>
+<button id="clearBtn" style="display:none;">Clear All</button>
+
+<h2>Buildings</h2>
+<div id="list"></div>
+
+<h2>Carbon Chart</h2>
+<canvas id="carbonChart"></canvas>
+
+<h2>Carbon Share</h2>
+<div style="width:240px;height:240px;margin:auto;">
+<canvas id="pieChart"></canvas>
 </div>
 
-<section class="panel">
-  <h2>Login / Signup</h2>
-  <input id="email" placeholder="Email">
-  <input id="password" type="password" placeholder="Password">
-  <br>
-  <button id="loginBtn">Login</button>
-  <button id="signupBtn">Sign Up</button>
-  <button id="logoutBtn">Logout</button>
-  <p id="status">Not logged in</p>
-</section>
+<h2>Recommendations</h2>
+<div id="recommendations"></div>
 
-<section class="panel">
-  <h2>Add Building</h2>
-  <input id="name" placeholder="Building name">
-  <input id="elec" type="number" placeholder="Electricity (kWh)">
-  <input id="water" type="number" placeholder="Water (liters)">
-  <input id="paper" type="number" placeholder="Paper (kg)">
-  <br><br>
-  <button id="submitBtn" disabled>Add Building</button>
-  <button id="clearBtn" class="danger" style="display:none">Clear All</button>
-</section>
-
-<section class="panel">
-  <h2>Buildings</h2>
-  <div id="list"></div>
-</section>
-
-<section class="panel">
-  <h2>Carbon Footprint</h2>
-  <canvas id="carbonChart"></canvas>
-  <h3>Carbon Share</h3>
-  <div class="pie-container">
-    <canvas id="pieChart"></canvas>
-  </div>
-</section>
-
-<section class="panel">
-  <h2>Recommendations</h2>
-  <div id="recommendations"></div>
-</section>
+<button id="pdfBtn">Download PDF</button>
+<button id="excelBtn">Export Excel</button>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword }
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword } 
 from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const firebaseConfig = {
@@ -68,11 +61,12 @@ const firebaseConfig = {
   appId: "1:233204598126:web:f6cbcdb617e7152a0bed7f"
 };
 
-const ADMIN_EMAIL = "admin@envirocore.com";
-const API = "https://envirocore-backend.onrender.com";
-
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+const API = "https://envirocore-backend.onrender.com";
+
+const emailEl = document.getElementById("email");
+const passEl = document.getElementById("password");
 
 let currentUID = null;
 let barChart = null;
@@ -83,13 +77,15 @@ signupBtn.onclick = signupUser;
 logoutBtn.onclick = logoutUser;
 submitBtn.onclick = submitData;
 clearBtn.onclick = clearAll;
+pdfBtn.onclick = downloadPDF;
+excelBtn.onclick = exportExcel;
 
 onAuthStateChanged(auth, user => {
   if (user) {
     currentUID = user.uid;
-    status.textContent = `Logged in as ${user.email}`;
+    status.textContent = "Logged in as " + user.email;
     submitBtn.disabled = false;
-    clearBtn.style.display = user.email === ADMIN_EMAIL ? "inline" : "none";
+    clearBtn.style.display = "inline";
     loadBuildings();
   } else {
     currentUID = null;
@@ -101,12 +97,12 @@ onAuthStateChanged(auth, user => {
 });
 
 async function signupUser() {
-  await createUserWithEmailAndPassword(auth, email.value, password.value);
+  await createUserWithEmailAndPassword(auth, emailEl.value, passEl.value);
   alert("Account created!");
 }
 
 async function loginUser() {
-  await signInWithEmailAndPassword(auth, email.value, password.value);
+  await signInWithEmailAndPassword(auth, emailEl.value, passEl.value);
 }
 
 async function logoutUser() {
@@ -126,9 +122,9 @@ async function submitData() {
   const d = getInputs();
   if (!d.name) return alert("Enter building name");
 
-  await fetch(`${API}/building`, {
+  await fetch(API + "/building", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {"Content-Type":"application/json"},
     body: JSON.stringify({ ...d, uid: currentUID })
   });
 
@@ -138,14 +134,16 @@ async function submitData() {
 
 async function clearAll() {
   if (!confirm("Clear all your data?")) return;
-  await fetch(`${API}/buildings?uid=${currentUID}`, { method: "DELETE" });
+  await fetch(API + "/buildings?uid=" + currentUID, { method: "DELETE" });
   loadBuildings();
 }
 
 async function loadBuildings() {
-  const data = await (await fetch(`${API}/buildings?uid=${currentUID}`)).json();
+  const data = await (await fetch(API + "/buildings?uid=" + currentUID)).json();
 
-  list.innerHTML = data.map(b => `<div class="card">${b.name} — ${b.carbon.toFixed(1)} kg</div>`).join("");
+  list.innerHTML = data.map(b =>
+    `<div>${b.name} — ${b.carbon.toFixed(1)} kg</div>`
+  ).join("");
 
   const labels = data.map(b => b.name);
   const values = data.map(b => b.carbon);
@@ -153,14 +151,14 @@ async function loadBuildings() {
   barChart?.destroy();
   barChart = new Chart(carbonChart, {
     type: "bar",
-    data: { labels, datasets: [{ label: "kg CO₂", data: values }] }
+    data: { labels, datasets:[{label:"kg CO₂", data: values}] }
   });
 
   pieChart?.destroy();
   pieChart = new Chart(pieChartEl, {
     type: "pie",
-    data: { labels, datasets: [{ data: values }] },
-    options: { responsive: true, maintainAspectRatio: false }
+    data: { labels, datasets:[{ data: values }] },
+    options: { responsive:true, maintainAspectRatio:false }
   });
 
   generateRecommendations(data);
@@ -176,13 +174,11 @@ function generateRecommendations(data) {
       saved += s;
       recs.push(`⚡ Reduce electricity → save ${s.toFixed(1)} kg`);
     }
-
     if (b.water_liters > 0) {
       const s = b.water_liters * 0.002 * 0.15;
       saved += s;
       recs.push(`🚿 Reduce water → save ${s.toFixed(1)} kg`);
     }
-
     if (b.paper_kg > 0) {
       const s = b.paper_kg * 1.5 * 0.1;
       saved += s;
@@ -190,13 +186,28 @@ function generateRecommendations(data) {
     }
 
     return `
-      <div class="rec">
+      <div>
         <b>${b.name}</b><br>
         Current: ${b.carbon.toFixed(1)} kg<br>
         ${recs.join("<br>")}
         <br><b>After:</b> ${(b.carbon - saved).toFixed(1)} kg
       </div>`;
   }).join("");
+}
+
+function downloadPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  doc.text(recommendations.innerText || "No data", 10, 10);
+  doc.save("envirocore.pdf");
+}
+
+async function exportExcel() {
+  const data = await (await fetch(API + "/buildings?uid=" + currentUID)).json();
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Buildings");
+  XLSX.writeFile(wb, "envirocore.xlsx");
 }
 </script>
 
