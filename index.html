@@ -44,18 +44,12 @@
 <section class="panel">
   <h2>Carbon Footprint</h2>
   <canvas id="carbonChart"></canvas>
-  <h3>Carbon Share</h3>
   <canvas id="pieChart"></canvas>
 </section>
 
 <section class="panel">
   <h2>Recommendations</h2>
   <div id="recommendations"></div>
-</section>
-
-<section class="panel">
-  <button id="pdfBtn">Download PDF</button>
-  <button id="excelBtn">Export Excel</button>
 </section>
 
 <script type="module">
@@ -74,138 +68,67 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
-// 🔹 Production backend
 const API = "https://envirocore-backend.onrender.com";
 
-let barChart = null;
-let pieChartInstance = null;
+let barChart, pieChart;
 
-window.addEventListener("DOMContentLoaded", () => {
+document.getElementById("loginBtn").onclick = () =>
+  signInWithEmailAndPassword(auth, email.value, password.value);
 
-  document.getElementById("themeBtn").onclick = () => document.body.classList.toggle("dark");
-  document.getElementById("loginBtn").onclick = loginUser;
-  document.getElementById("logoutBtn").onclick = logoutUser;
-  document.getElementById("submitBtn").onclick = submitData;
-  document.getElementById("clearBtn").onclick = clearAll;
-  document.getElementById("pdfBtn").onclick = downloadPDF;
-  document.getElementById("excelBtn").onclick = exportExcel;
+document.getElementById("logoutBtn").onclick = () => signOut(auth);
 
-  onAuthStateChanged(auth, user => {
-    const statusEl = document.getElementById("status");
-    const submitBtn = document.getElementById("submitBtn");
-    const clearBtn = document.getElementById("clearBtn");
+document.getElementById("submitBtn").onclick = submitData;
+document.getElementById("clearBtn").onclick = clearAll;
 
-    if (user) {
-      statusEl.textContent = `Logged in as ${user.email}`;
-      submitBtn.disabled = false;
-      clearBtn.style.display = "inline";
-    } else {
-      statusEl.textContent = "Not logged in";
-      submitBtn.disabled = true;
-      clearBtn.style.display = "none";
-    }
-  });
-
-  loadBuildings();
+onAuthStateChanged(auth, user => {
+  submitBtn.disabled = !user;
+  if (user) loadBuildings();
 });
-
-async function loginUser() {
-  await signInWithEmailAndPassword(auth,
-    document.getElementById("email").value,
-    document.getElementById("password").value
-  );
-  alert("Login successful");
-}
-
-async function logoutUser() {
-  await signOut(auth);
-  alert("Logged out");
-}
 
 function getInputs() {
   return {
-    name: document.getElementById("name").value.trim(),
-    electricity_kwh: Number(document.getElementById("elec").value) || 0,
-    water_liters: Number(document.getElementById("water").value) || 0,
-    paper_kg: Number(document.getElementById("paper").value) || 0
+    name: name.value.trim(),
+    electricity_kwh: +elec.value || 0,
+    water_liters: +water.value || 0,
+    paper_kg: +paper.value || 0
   };
 }
 
 async function submitData() {
-  const d = getInputs();
-  if (!d.name) return alert("Enter building name");
+  const user = auth.currentUser;
+  if (!user) return alert("Login first");
 
+  const data = getInputs();
   await fetch(`${API}/building`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(d)
+    body: JSON.stringify({ ...data, userId: user.uid })
   });
 
-  ["name","elec","water","paper"].forEach(id => document.getElementById(id).value = "");
   loadBuildings();
 }
 
 async function clearAll() {
-  if (!confirm("Clear all data?")) return;
-  await fetch(`${API}/buildings`, { method: "DELETE" });
+  const user = auth.currentUser;
+  await fetch(`${API}/buildings?userId=${user.uid}`, { method: "DELETE" });
   loadBuildings();
 }
 
 async function loadBuildings() {
-  const data = await (await fetch(`${API}/buildings`)).json();
+  const user = auth.currentUser;
+  const res = await fetch(`${API}/buildings?userId=${user.uid}`);
+  const data = await res.json();
 
-  document.getElementById("list").innerHTML = data.map(b => `
-    <div class="card">
-      <b>${b.name}</b><br>${b.carbon.toFixed(1)} kg CO₂
-    </div>`).join("");
+  list.innerHTML = data.map(b => `<div>${b.name} - ${b.carbon.toFixed(1)} kg</div>`).join("");
 
   const labels = data.map(b => b.name);
   const values = data.map(b => b.carbon);
 
   barChart?.destroy();
-  barChart = new Chart(document.getElementById("carbonChart"), {
-    type: "bar",
-    data: { labels, datasets: [{ label: "kg CO₂", data: values }] }
-  });
+  pieChart?.destroy();
 
-  pieChartInstance?.destroy();
-  pieChartInstance = new Chart(document.getElementById("pieChart"), {
-    type: "pie",
-    data: { labels, datasets: [{ data: values }] }
-  });
-
-  generateRecommendations(data);
-}
-
-function generateRecommendations(data) {
-  const total = data.reduce((s, b) => s + b.carbon, 0) || 1;
-
-  document.getElementById("recommendations").innerHTML = data.map(b => {
-    const share = (b.carbon / total * 100).toFixed(1);
-    const save = b.carbon * 0.2;
-    return `
-      <div class="rec">
-        <b>${b.name}</b> contributes ${share}%<br>
-        ⚡ LED + HVAC saves ${save.toFixed(0)} kg<br>
-        → ${b.carbon.toFixed(0)} → ${(b.carbon - save).toFixed(0)} kg<br>
-        Next year ≈ ${(b.carbon * 1.05).toFixed(0)} kg
-      </div>`;
-  }).join("");
-}
-
-function downloadPDF() {
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
-  doc.text(document.getElementById("recommendations").innerText || "No data", 10, 10);
-  doc.save("envirocore.pdf");
-}
-
-async function exportExcel() {
-  const data = await (await fetch(`${API}/buildings`)).json();
-  const ws = XLSX.utils.json_to_sheet(data);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Buildings");
-  XLSX.writeFile(wb, "envirocore.xlsx");
+  barChart = new Chart(carbonChart, { type: "bar", data: { labels, datasets: [{ data: values }] } });
+  pieChart = new Chart(pieChart, { type: "pie", data: { labels, datasets: [{ data: values }] } });
 }
 </script>
 
