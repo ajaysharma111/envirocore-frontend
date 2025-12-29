@@ -5,8 +5,6 @@
   <title>EnviroCore</title>
   <link rel="stylesheet" href="styles.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -21,6 +19,7 @@
   <input id="email" placeholder="Email">
   <input id="password" type="password" placeholder="Password">
   <button id="loginBtn">Login</button>
+  <button id="signupBtn">Sign Up</button>
   <button id="logoutBtn">Logout</button>
   <p id="status">Not logged in</p>
 </section>
@@ -47,14 +46,15 @@
   <canvas id="pieChart"></canvas>
 </section>
 
-<section class="panel">
-  <h2>Recommendations</h2>
-  <div id="recommendations"></div>
-</section>
-
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDdon6u4Rz37tWg1eKLtxkmMGpCjn4grr8",
@@ -67,23 +67,42 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-
 const API = "https://envirocore-backend.onrender.com";
 
-let barChart, pieChart;
+let barChart = null;
+let pieChart = null;
 
-document.getElementById("loginBtn").onclick = () =>
-  signInWithEmailAndPassword(auth, email.value, password.value);
+window.addEventListener("DOMContentLoaded", () => {
+  themeBtn.onclick = () => document.body.classList.toggle("dark");
 
-document.getElementById("logoutBtn").onclick = () => signOut(auth);
+  loginBtn.onclick = loginUser;
+  signupBtn.onclick = signupUser;
+  logoutBtn.onclick = logoutUser;
+  submitBtn.onclick = submitData;
+  clearBtn.onclick = clearAll;
 
-document.getElementById("submitBtn").onclick = submitData;
-document.getElementById("clearBtn").onclick = clearAll;
-
-onAuthStateChanged(auth, user => {
-  submitBtn.disabled = !user;
-  if (user) loadBuildings();
+  onAuthStateChanged(auth, user => {
+    status.textContent = user ? `Logged in as ${user.email}` : "Not logged in";
+    submitBtn.disabled = !user;
+    clearBtn.style.display = user ? "inline" : "none";
+    if (user) loadBuildings();
+  });
 });
+
+async function signupUser() {
+  await createUserWithEmailAndPassword(auth, email.value, password.value);
+  alert("Account created!");
+}
+
+async function loginUser() {
+  await signInWithEmailAndPassword(auth, email.value, password.value);
+  alert("Login successful!");
+}
+
+async function logoutUser() {
+  await signOut(auth);
+  alert("Logged out");
+}
 
 function getInputs() {
   return {
@@ -95,28 +114,27 @@ function getInputs() {
 }
 
 async function submitData() {
-  const user = auth.currentUser;
-  if (!user) return alert("Login first");
+  const d = getInputs();
+  if (!d.name) return alert("Enter building name");
 
-  const data = getInputs();
   await fetch(`${API}/building`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...data, userId: user.uid })
+    body: JSON.stringify(d)
   });
 
+  ["name","elec","water","paper"].forEach(id => document.getElementById(id).value = "");
   loadBuildings();
 }
 
 async function clearAll() {
-  const user = auth.currentUser;
-  await fetch(`${API}/buildings?userId=${user.uid}`, { method: "DELETE" });
+  if (!confirm("Clear all data?")) return;
+  await fetch(`${API}/buildings`, { method: "DELETE" });
   loadBuildings();
 }
 
 async function loadBuildings() {
-  const user = auth.currentUser;
-  const res = await fetch(`${API}/buildings?userId=${user.uid}`);
+  const res = await fetch(`${API}/buildings`);
   const data = await res.json();
 
   list.innerHTML = data.map(b => `<div>${b.name} - ${b.carbon.toFixed(1)} kg</div>`).join("");
