@@ -46,6 +46,11 @@
   <canvas id="pieChart"></canvas>
 </section>
 
+<section class="panel">
+  <h2>Recommendations</h2>
+  <div id="recommendations"></div>
+</section>
+
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
@@ -70,33 +75,53 @@ const auth = getAuth(app);
 const API = "https://envirocore-backend.onrender.com";
 
 let barChart = null;
-let pieChart = null;
+let pieChartInstance = null;
 
 window.addEventListener("DOMContentLoaded", () => {
-  themeBtn.onclick = () => document.body.classList.toggle("dark");
+  document.getElementById("themeBtn").onclick = () => document.body.classList.toggle("dark");
 
-  loginBtn.onclick = loginUser;
-  signupBtn.onclick = signupUser;
-  logoutBtn.onclick = logoutUser;
-  submitBtn.onclick = submitData;
-  clearBtn.onclick = clearAll;
+  document.getElementById("loginBtn").onclick = loginUser;
+  document.getElementById("signupBtn").onclick = signupUser;
+  document.getElementById("logoutBtn").onclick = logoutUser;
+  document.getElementById("submitBtn").onclick = submitData;
+  document.getElementById("clearBtn").onclick = clearAll;
 
   onAuthStateChanged(auth, user => {
-    status.textContent = user ? `Logged in as ${user.email}` : "Not logged in";
-    submitBtn.disabled = !user;
-    clearBtn.style.display = user ? "inline" : "none";
-    if (user) loadBuildings();
+    const status = document.getElementById("status");
+    const submitBtn = document.getElementById("submitBtn");
+    const clearBtn = document.getElementById("clearBtn");
+
+    if (user) {
+      status.textContent = `Logged in as ${user.email}`;
+      submitBtn.disabled = false;
+      clearBtn.style.display = "inline";
+      loadBuildings();
+    } else {
+      status.textContent = "Not logged in";
+      submitBtn.disabled = true;
+      clearBtn.style.display = "none";
+      document.getElementById("list").innerHTML = "";
+      document.getElementById("recommendations").innerHTML = "";
+    }
   });
 });
 
 async function signupUser() {
-  await createUserWithEmailAndPassword(auth, email.value, password.value);
-  alert("Account created!");
+  try {
+    await createUserWithEmailAndPassword(auth, email.value, password.value);
+    alert("Account created!");
+  } catch (e) {
+    alert(e.message);
+  }
 }
 
 async function loginUser() {
-  await signInWithEmailAndPassword(auth, email.value, password.value);
-  alert("Login successful!");
+  try {
+    await signInWithEmailAndPassword(auth, email.value, password.value);
+    alert("Login successful!");
+  } catch (e) {
+    alert(e.message);
+  }
 }
 
 async function logoutUser() {
@@ -137,16 +162,43 @@ async function loadBuildings() {
   const res = await fetch(`${API}/buildings`);
   const data = await res.json();
 
-  list.innerHTML = data.map(b => `<div>${b.name} - ${b.carbon.toFixed(1)} kg</div>`).join("");
+  document.getElementById("list").innerHTML = data.map(b => `
+    <div class="card"><b>${b.name}</b><br>${b.carbon.toFixed(1)} kg CO₂</div>
+  `).join("");
 
   const labels = data.map(b => b.name);
   const values = data.map(b => b.carbon);
 
   barChart?.destroy();
-  pieChart?.destroy();
+  pieChartInstance?.destroy();
 
-  barChart = new Chart(carbonChart, { type: "bar", data: { labels, datasets: [{ data: values }] } });
-  pieChart = new Chart(pieChart, { type: "pie", data: { labels, datasets: [{ data: values }] } });
+  barChart = new Chart(document.getElementById("carbonChart"), {
+    type: "bar",
+    data: { labels, datasets: [{ label: "kg CO₂", data: values }] }
+  });
+
+  pieChartInstance = new Chart(document.getElementById("pieChart"), {
+    type: "pie",
+    data: { labels, datasets: [{ data: values }] }
+  });
+
+  generateRecommendations(data);
+}
+
+function generateRecommendations(data) {
+  const total = data.reduce((s, b) => s + b.carbon, 0) || 1;
+
+  document.getElementById("recommendations").innerHTML = data.map(b => {
+    const share = (b.carbon / total * 100).toFixed(1);
+    const save = b.carbon * 0.2;
+    return `
+      <div class="rec">
+        <b>${b.name}</b> contributes ${share}%<br>
+        ⚡ LED + HVAC saves ${save.toFixed(0)} kg<br>
+        → ${b.carbon.toFixed(0)} → ${(b.carbon - save).toFixed(0)} kg<br>
+        Next year ≈ ${(b.carbon * 1.05).toFixed(0)} kg
+      </div>`;
+  }).join("");
 }
 </script>
 
