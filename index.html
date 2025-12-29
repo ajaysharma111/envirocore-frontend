@@ -5,8 +5,6 @@
   <title>EnviroCore</title>
   <link rel="stylesheet" href="styles.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -17,9 +15,10 @@
 </div>
 
 <section class="panel">
-  <h2>Login</h2>
+  <h2>Login / Signup</h2>
   <input id="email" placeholder="Email">
   <input id="password" type="password" placeholder="Password">
+  <br>
   <button id="loginBtn">Login</button>
   <button id="signupBtn">Sign Up</button>
   <button id="logoutBtn">Logout</button>
@@ -32,9 +31,9 @@
   <input id="elec" type="number" placeholder="Electricity (kWh)">
   <input id="water" type="number" placeholder="Water (liters)">
   <input id="paper" type="number" placeholder="Paper (kg)">
-  <br>
+  <br><br>
   <button id="submitBtn" disabled>Add Building</button>
-  <button id="clearBtn" class="danger" style="display:none;">Clear All</button>
+  <button id="clearBtn" class="danger" style="display:none">Clear All</button>
 </section>
 
 <section class="panel">
@@ -45,7 +44,10 @@
 <section class="panel">
   <h2>Carbon Footprint</h2>
   <canvas id="carbonChart"></canvas>
-  <canvas id="pieChart"></canvas>
+  <h3>Carbon Share</h3>
+  <div class="pie-container">
+    <canvas id="pieChart"></canvas>
+  </div>
 </section>
 
 <section class="panel">
@@ -53,20 +55,10 @@
   <div id="recommendations"></div>
 </section>
 
-<section class="panel">
-  <button id="pdfBtn">Download PDF</button>
-  <button id="excelBtn">Export Excel</button>
-</section>
-
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import {
-  getAuth,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signOut,
-  onAuthStateChanged
-} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword } 
+from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDdon6u4Rz37tWg1eKLtxkmMGpCjn4grr8",
@@ -77,75 +69,58 @@ const firebaseConfig = {
   appId: "1:233204598126:web:f6cbcdb617e7152a0bed7f"
 };
 
+const ADMIN_EMAIL = "admin@envirocore.com";
 const API = "https://envirocore-backend.onrender.com";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
+let currentUID = null;
 let barChart = null;
-let pieChartInstance = null;
+let pieChart = null;
 
-window.addEventListener("DOMContentLoaded", () => {
+themeBtn.onclick = () => document.body.classList.toggle("dark");
+loginBtn.onclick = loginUser;
+signupBtn.onclick = signupUser;
+logoutBtn.onclick = logoutUser;
+submitBtn.onclick = submitData;
+clearBtn.onclick = clearAll;
 
-  const themeBtn = document.getElementById("themeBtn");
-  const loginBtn = document.getElementById("loginBtn");
-  const signupBtn = document.getElementById("signupBtn");
-  const logoutBtn = document.getElementById("logoutBtn");
-  const submitBtn = document.getElementById("submitBtn");
-  const clearBtn = document.getElementById("clearBtn");
-  const pdfBtn = document.getElementById("pdfBtn");
-  const excelBtn = document.getElementById("excelBtn");
-  const statusEl = document.getElementById("status");
-
-  themeBtn.onclick = () => document.body.classList.toggle("dark");
-  loginBtn.onclick = loginUser;
-  signupBtn.onclick = signupUser;
-  logoutBtn.onclick = logoutUser;
-  submitBtn.onclick = submitData;
-  clearBtn.onclick = clearAll;
-  pdfBtn.onclick = downloadPDF;
-  excelBtn.onclick = exportExcel;
-
-  onAuthStateChanged(auth, user => {
-    if (user) {
-      statusEl.textContent = "Logged in as " + user.email;
-      submitBtn.disabled = false;
-      clearBtn.style.display = "inline";
-      loadBuildings();
-    } else {
-      statusEl.textContent = "Not logged in";
-      submitBtn.disabled = true;
-      clearBtn.style.display = "none";
-      list.innerHTML = "";
-    }
-  });
+onAuthStateChanged(auth, user => {
+  if (user) {
+    currentUID = user.uid;
+    status.textContent = `Logged in as ${user.email}`;
+    submitBtn.disabled = false;
+    clearBtn.style.display = user.email === ADMIN_EMAIL ? "inline" : "none";
+    loadBuildings();
+  } else {
+    currentUID = null;
+    status.textContent = "Not logged in";
+    submitBtn.disabled = true;
+    clearBtn.style.display = "none";
+    list.innerHTML = "";
+  }
 });
 
 async function signupUser() {
-  try {
-    await createUserWithEmailAndPassword(auth, email.value, password.value);
-    alert("Account created!");
-  } catch (e) { alert(e.message); }
+  await createUserWithEmailAndPassword(auth, email.value, password.value);
+  alert("Account created!");
 }
 
 async function loginUser() {
-  try {
-    await signInWithEmailAndPassword(auth, email.value, password.value);
-    alert("Login successful!");
-  } catch (e) { alert(e.message); }
+  await signInWithEmailAndPassword(auth, email.value, password.value);
 }
 
 async function logoutUser() {
   await signOut(auth);
-  alert("Logged out");
 }
 
 function getInputs() {
   return {
-    name: document.getElementById("name").value.trim(),
-    electricity_kwh: Number(document.getElementById("elec").value) || 0,
-    water_liters: Number(document.getElementById("water").value) || 0,
-    paper_kg: Number(document.getElementById("paper").value) || 0
+    name: name.value.trim(),
+    electricity_kwh: +elec.value || 0,
+    water_liters: +water.value || 0,
+    paper_kg: +paper.value || 0
   };
 }
 
@@ -156,78 +131,74 @@ async function submitData() {
   await fetch(`${API}/building`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(d)
+    body: JSON.stringify({ ...d, uid: currentUID })
   });
 
-  ["name","elec","water","paper"].forEach(id => document.getElementById(id).value = "");
+  name.value = elec.value = water.value = paper.value = "";
   loadBuildings();
 }
 
 async function clearAll() {
-  if (!confirm("Clear all data?")) return;
-  await fetch(`${API}/buildings`, { method: "DELETE" });
+  if (!confirm("Clear all your data?")) return;
+  await fetch(`${API}/buildings?uid=${currentUID}`, { method: "DELETE" });
   loadBuildings();
 }
 
 async function loadBuildings() {
-  const res = await fetch(`${API}/buildings`);
-  const data = await res.json();
+  const data = await (await fetch(`${API}/buildings?uid=${currentUID}`)).json();
 
-  document.getElementById("list").innerHTML = data.map(b => `
-    <div class="card">
-      <b>${b.name}</b><br>${b.carbon.toFixed(1)} kg CO₂
-    </div>`).join("");
+  list.innerHTML = data.map(b => `<div class="card">${b.name} — ${b.carbon.toFixed(1)} kg</div>`).join("");
 
   const labels = data.map(b => b.name);
   const values = data.map(b => b.carbon);
 
   barChart?.destroy();
-  pieChartInstance?.destroy();
+  barChart = new Chart(carbonChart, {
+    type: "bar",
+    data: { labels, datasets: [{ label: "kg CO₂", data: values }] }
+  });
 
-  barChart = new Chart(carbonChart, { type: "bar", data: { labels, datasets:[{label:"kg CO₂",data:values}]}});
-  pieChartInstance = new Chart(pieChart, { type: "pie", data: { labels, datasets:[{data:values}]} });
+  pieChart?.destroy();
+  pieChart = new Chart(pieChartEl, {
+    type: "pie",
+    data: { labels, datasets: [{ data: values }] },
+    options: { responsive: true, maintainAspectRatio: false }
+  });
 
   generateRecommendations(data);
 }
 
 function generateRecommendations(data) {
-  const total = data.reduce((s, b) => s + b.carbon, 0) || 1;
+  recommendations.innerHTML = data.map(b => {
+    let saved = 0;
+    let recs = [];
 
-  document.getElementById("recommendations").innerHTML = data.map(b => {
-    const share = (b.carbon / total * 100).toFixed(1);
+    if (b.electricity_kwh > 0) {
+      const s = b.electricity_kwh * 0.5 * 0.2;
+      saved += s;
+      recs.push(`⚡ Reduce electricity → save ${s.toFixed(1)} kg`);
+    }
 
-    const increase = b.carbon * 0.05;   // +5% if nothing done
-    const nextYear = b.carbon + increase;
+    if (b.water_liters > 0) {
+      const s = b.water_liters * 0.002 * 0.15;
+      saved += s;
+      recs.push(`🚿 Reduce water → save ${s.toFixed(1)} kg`);
+    }
 
-    const save = b.carbon * 0.20;       // −20% if action taken
-    const reduced = b.carbon - save;
+    if (b.paper_kg > 0) {
+      const s = b.paper_kg * 1.5 * 0.1;
+      saved += s;
+      recs.push(`📄 Reduce paper → save ${s.toFixed(1)} kg`);
+    }
 
     return `
       <div class="rec">
-        <b>${b.name}</b> contributes ${share}% of total emissions<br><br>
-
-        ❌ If you do nothing:<br>
-        Emissions increase by ${increase.toFixed(0)} kg → <b>${nextYear.toFixed(0)} kg CO₂</b><br><br>
-
-        ✅ If you act (LED + Smart HVAC):<br>
-        Save ${save.toFixed(0)} kg → <b>${reduced.toFixed(0)} kg CO₂</b>
-      </div>
-    `;
+        <b>${b.name}</b><br>
+        Current: ${b.carbon.toFixed(1)} kg<br>
+        ${recs.join("<br>")}
+        <br><b>After:</b> ${(b.carbon - saved).toFixed(1)} kg
+      </div>`;
   }).join("");
-}
-function downloadPDF() {
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
-  doc.text(document.getElementById("recommendations").innerText || "No data", 10, 10);
-  doc.save("envirocore.pdf");
-}
-
-async function exportExcel() {
-  const data = await (await fetch(`${API}/buildings`)).json();
-  const ws = XLSX.utils.json_to_sheet(data);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Buildings");
-  XLSX.writeFile(wb, "envirocore.xlsx");
 }
 </script>
 
