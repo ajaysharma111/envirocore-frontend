@@ -3,18 +3,26 @@
 <head>
 <meta charset="UTF-8">
 <title>EnviroCore</title>
-<link rel="stylesheet" href="styles.css">
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+
+<style>
+body { font-family: Arial; padding:20px; background:#f5f5f5; }
+input, button { padding:6px; margin:4px; }
+#pieChart { max-width:220px; }
+.rec { background:#fff; padding:10px; margin:8px 0; border-radius:6px; }
+.card { background:#fff; padding:8px; margin:6px 0; border-radius:6px; }
+</style>
 </head>
 <body>
 
-<h1>🌱 EnviroCore</h1>
+<h1>🌱 EnviroCore Dashboard</h1>
 
-<h2>Login / Signup</h2>
+<h3>Login</h3>
 <input id="email" placeholder="Email">
-<input id="password" type="password" placeholder="Password">
+<input id="password" type="password">
 <button id="loginBtn">Login</button>
 <button id="signupBtn">Sign Up</button>
 <button id="logoutBtn">Logout</button>
@@ -22,26 +30,22 @@
 
 <hr>
 
-<h2>Add Building</h2>
+<h3>Add Building</h3>
 <input id="name" placeholder="Building name">
-<input id="elec" type="number" placeholder="Electricity">
-<input id="water" type="number" placeholder="Water">
-<input id="paper" type="number" placeholder="Paper">
-<button id="submitBtn" disabled>Add Building</button>
+<input id="elec" type="number" placeholder="Electricity (kWh)">
+<input id="water" type="number" placeholder="Water (liters)">
+<input id="paper" type="number" placeholder="Paper (kg)">
+<button id="submitBtn" disabled>Add</button>
 <button id="clearBtn" style="display:none;">Clear All</button>
 
-<h2>Buildings</h2>
+<h3>Buildings</h3>
 <div id="list"></div>
 
-<h2>Carbon Chart</h2>
+<h3>Carbon Footprint</h3>
 <canvas id="carbonChart"></canvas>
-
-<h2>Carbon Share</h2>
-<div style="width:240px;height:240px;margin:auto;">
 <canvas id="pieChart"></canvas>
-</div>
 
-<h2>Recommendations</h2>
+<h3>Recommendations</h3>
 <div id="recommendations"></div>
 
 <button id="pdfBtn">Download PDF</button>
@@ -49,7 +53,7 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword } 
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword }
 from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const firebaseConfig = {
@@ -65,151 +69,121 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const API = "https://envirocore-backend.onrender.com";
 
-const emailEl = document.getElementById("email");
-const passEl = document.getElementById("password");
-
-let currentUID = null;
+let uid = null;
 let barChart = null;
 let pieChart = null;
 
-loginBtn.onclick = loginUser;
-signupBtn.onclick = signupUser;
-logoutBtn.onclick = logoutUser;
-submitBtn.onclick = submitData;
+loginBtn.onclick = () => signInWithEmailAndPassword(auth, email.value, password.value);
+signupBtn.onclick = () => createUserWithEmailAndPassword(auth, email.value, password.value);
+logoutBtn.onclick = () => signOut(auth);
+submitBtn.onclick = submit;
 clearBtn.onclick = clearAll;
 pdfBtn.onclick = downloadPDF;
 excelBtn.onclick = exportExcel;
 
 onAuthStateChanged(auth, user => {
   if (user) {
-    currentUID = user.uid;
+    uid = user.uid;
     status.textContent = "Logged in as " + user.email;
     submitBtn.disabled = false;
     clearBtn.style.display = "inline";
-    loadBuildings();
+    load();
   } else {
-    currentUID = null;
+    uid = null;
     status.textContent = "Not logged in";
     submitBtn.disabled = true;
     clearBtn.style.display = "none";
-    list.innerHTML = "";
+    list.innerHTML = recommendations.innerHTML = "";
   }
 });
 
-async function signupUser() {
-  await createUserWithEmailAndPassword(auth, emailEl.value, passEl.value);
-  alert("Account created!");
-}
-
-async function loginUser() {
-  await signInWithEmailAndPassword(auth, emailEl.value, passEl.value);
-}
-
-async function logoutUser() {
-  await signOut(auth);
-}
-
-function getInputs() {
-  return {
-    name: name.value.trim(),
-    electricity_kwh: +elec.value || 0,
-    water_liters: +water.value || 0,
-    paper_kg: +paper.value || 0
+async function submit() {
+  const d = {
+    name: name.value,
+    electricity_kwh:+elec.value,
+    water_liters:+water.value,
+    paper_kg:+paper.value,
+    uid
   };
-}
-
-async function submitData() {
-  const d = getInputs();
-  if (!d.name) return alert("Enter building name");
 
   await fetch(API + "/building", {
-    method: "POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({ ...d, uid: currentUID })
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body:JSON.stringify(d)
   });
 
   name.value = elec.value = water.value = paper.value = "";
-  loadBuildings();
+  load();
 }
 
 async function clearAll() {
-  if (!confirm("Clear all your data?")) return;
-  await fetch(API + "/buildings?uid=" + currentUID, { method: "DELETE" });
-  loadBuildings();
+  await fetch(API + "/buildings?uid=" + uid, { method:"DELETE" });
+  load();
 }
 
-async function loadBuildings() {
-  const data = await (await fetch(API + "/buildings?uid=" + currentUID)).json();
+async function load() {
+  const data = await (await fetch(API + "/buildings?uid=" + uid)).json();
 
-  list.innerHTML = data.map(b =>
-    `<div>${b.name} — ${b.carbon.toFixed(1)} kg</div>`
-  ).join("");
-
-  const labels = data.map(b => b.name);
-  const values = data.map(b => b.carbon);
+  list.innerHTML = data.map(b => `<div class="card">${b.name} — ${b.carbon.toFixed(1)} kg</div>`).join("");
 
   barChart?.destroy();
+  pieChart?.destroy();
+
   barChart = new Chart(carbonChart, {
-    type: "bar",
-    data: { labels, datasets:[{label:"kg CO₂", data: values}] }
+    type:"bar",
+    data:{ labels:data.map(b=>b.name), datasets:[{label:"kg CO₂", data:data.map(b=>b.carbon)}]}
   });
 
-  pieChart?.destroy();
-  pieChart = new Chart(pieChartEl, {
-    type: "pie",
-    data: { labels, datasets:[{ data: values }] },
-    options: { responsive:true, maintainAspectRatio:false }
+  pieChart = new Chart(pieChart, {
+    type:"pie",
+    data:{ labels:data.map(b=>b.name), datasets:[{data:data.map(b=>b.carbon)}]}
   });
 
   generateRecommendations(data);
 }
 
 function generateRecommendations(data) {
-  recommendations.innerHTML = data.map(b => {
-    let saved = 0;
-    let recs = [];
+  if (!data.length) {
+    recommendations.innerHTML = "No data yet.";
+    return;
+  }
 
-    if (b.electricity_kwh > 0) {
-      const s = b.electricity_kwh * 0.5 * 0.2;
-      saved += s;
-      recs.push(`⚡ Reduce electricity → save ${s.toFixed(1)} kg`);
-    }
-    if (b.water_liters > 0) {
-      const s = b.water_liters * 0.002 * 0.15;
-      saved += s;
-      recs.push(`🚿 Reduce water → save ${s.toFixed(1)} kg`);
-    }
-    if (b.paper_kg > 0) {
-      const s = b.paper_kg * 1.5 * 0.1;
-      saved += s;
-      recs.push(`📄 Reduce paper → save ${s.toFixed(1)} kg`);
-    }
+  recommendations.innerHTML = data.map(b => {
+    const elecSave = b.electricity_kwh * 0.2 * 0.5;
+    const waterSave = b.water_liters * 0.2 * 0.002;
+    const paperSave = b.paper_kg * 0.2 * 1.5;
+    const totalSave = elecSave + waterSave + paperSave;
 
     return `
-      <div>
+      <div class="rec">
         <b>${b.name}</b><br>
-        Current: ${b.carbon.toFixed(1)} kg<br>
-        ${recs.join("<br>")}
-        <br><b>After:</b> ${(b.carbon - saved).toFixed(1)} kg
-      </div>`;
+        Emissions: ${b.carbon.toFixed(1)} kg CO₂<br>
+        If you act → save ${totalSave.toFixed(1)} kg<br>
+        If you ignore → waste ${totalSave.toFixed(1)} kg
+        <ul>
+          <li>💡 LED lighting & efficient HVAC</li>
+          <li>🚰 Sensor taps & leak repair</li>
+          <li>🖨 Reduce printing</li>
+        </ul>
+      </div>
+    `;
   }).join("");
 }
 
 function downloadPDF() {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
-  doc.text(recommendations.innerText || "No data", 10, 10);
+  doc.text(list.innerText,10,10);
   doc.save("envirocore.pdf");
 }
 
 async function exportExcel() {
-  const data = await (await fetch(API + "/buildings?uid=" + currentUID)).json();
+  const data = await (await fetch(API + "/buildings?uid=" + uid)).json();
   const ws = XLSX.utils.json_to_sheet(data);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Buildings");
   XLSX.writeFile(wb, "envirocore.xlsx");
 }
 </script>
-
 </body>
 </html>
