@@ -34,7 +34,7 @@
   <input id="paper" type="number" placeholder="Paper (kg)">
   <br>
   <button id="submitBtn" disabled>Add Building</button>
-  <button id="clearBtn" class="danger">Clear All</button>
+  <button id="clearBtn" class="danger" style="display:none;">Clear All</button>
 </section>
 
 <section class="panel">
@@ -77,14 +77,26 @@ const firebaseConfig = {
   appId: "1:233204598126:web:f6cbcdb617e7152a0bed7f"
 };
 
+const API = "https://envirocore-backend.onrender.com";
+
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const API = "https://envirocore-backend.onrender.com";
 
 let barChart = null;
 let pieChartInstance = null;
 
 window.addEventListener("DOMContentLoaded", () => {
+
+  const themeBtn = document.getElementById("themeBtn");
+  const loginBtn = document.getElementById("loginBtn");
+  const signupBtn = document.getElementById("signupBtn");
+  const logoutBtn = document.getElementById("logoutBtn");
+  const submitBtn = document.getElementById("submitBtn");
+  const clearBtn = document.getElementById("clearBtn");
+  const pdfBtn = document.getElementById("pdfBtn");
+  const excelBtn = document.getElementById("excelBtn");
+  const statusEl = document.getElementById("status");
+
   themeBtn.onclick = () => document.body.classList.toggle("dark");
   loginBtn.onclick = loginUser;
   signupBtn.onclick = signupUser;
@@ -95,10 +107,17 @@ window.addEventListener("DOMContentLoaded", () => {
   excelBtn.onclick = exportExcel;
 
   onAuthStateChanged(auth, user => {
-    status.textContent = user ? `Logged in as ${user.email}` : "Not logged in";
-    submitBtn.disabled = !user;
-    clearBtn.style.display = user ? "inline" : "none";
-    if (user) loadBuildings();
+    if (user) {
+      statusEl.textContent = "Logged in as " + user.email;
+      submitBtn.disabled = false;
+      clearBtn.style.display = "inline";
+      loadBuildings();
+    } else {
+      statusEl.textContent = "Not logged in";
+      submitBtn.disabled = true;
+      clearBtn.style.display = "none";
+      list.innerHTML = "";
+    }
   });
 });
 
@@ -123,10 +142,10 @@ async function logoutUser() {
 
 function getInputs() {
   return {
-    name: name.value.trim(),
-    electricity_kwh: +elec.value || 0,
-    water_liters: +water.value || 0,
-    paper_kg: +paper.value || 0
+    name: document.getElementById("name").value.trim(),
+    electricity_kwh: Number(document.getElementById("elec").value) || 0,
+    water_liters: Number(document.getElementById("water").value) || 0,
+    paper_kg: Number(document.getElementById("paper").value) || 0
   };
 }
 
@@ -154,7 +173,10 @@ async function loadBuildings() {
   const res = await fetch(`${API}/buildings`);
   const data = await res.json();
 
-  list.innerHTML = data.map(b => `<div class="card"><b>${b.name}</b><br>${b.carbon.toFixed(1)} kg CO₂</div>`).join("");
+  document.getElementById("list").innerHTML = data.map(b => `
+    <div class="card">
+      <b>${b.name}</b><br>${b.carbon.toFixed(1)} kg CO₂
+    </div>`).join("");
 
   const labels = data.map(b => b.name);
   const values = data.map(b => b.carbon);
@@ -183,7 +205,7 @@ function generateRecommendations(data) {
 function downloadPDF() {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
-  doc.text(recommendations.innerText || "No data", 10, 10);
+  doc.text(document.getElementById("recommendations").innerText || "No data", 10, 10);
   doc.save("envirocore.pdf");
 }
 
