@@ -191,17 +191,30 @@ async function loadBuildings() {
 }
 
 function generateRecommendations(data) {
-  const total = data.reduce((s,b)=>s+b.carbon,0)||1;
-  recommendations.innerHTML = data.map(b=>{
-    const save=b.carbon*0.2;
-    return `<div class="rec">
-      <b>${b.name}</b><br>
-      Save ${save.toFixed(0)} kg by switching to LED<br>
-      → ${(b.carbon-save).toFixed(0)} kg
-    </div>`;
+  const total = data.reduce((s, b) => s + b.carbon, 0) || 1;
+
+  document.getElementById("recommendations").innerHTML = data.map(b => {
+    const share = (b.carbon / total * 100).toFixed(1);
+
+    const increase = b.carbon * 0.05;   // +5% if nothing done
+    const nextYear = b.carbon + increase;
+
+    const save = b.carbon * 0.20;       // −20% if action taken
+    const reduced = b.carbon - save;
+
+    return `
+      <div class="rec">
+        <b>${b.name}</b> contributes ${share}% of total emissions<br><br>
+
+        ❌ If you do nothing:<br>
+        Emissions increase by ${increase.toFixed(0)} kg → <b>${nextYear.toFixed(0)} kg CO₂</b><br><br>
+
+        ✅ If you act (LED + Smart HVAC):<br>
+        Save ${save.toFixed(0)} kg → <b>${reduced.toFixed(0)} kg CO₂</b>
+      </div>
+    `;
   }).join("");
 }
-
 function downloadPDF() {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
