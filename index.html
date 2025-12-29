@@ -44,8 +44,12 @@
 
 <section class="panel">
   <h3>Carbon Footprint</h3>
-  <canvas id="carbonChart"></canvas>
-  <canvas id="pieChart"></canvas>
+  <div class="chart-box">
+    <canvas id="carbonChart"></canvas>
+  </div>
+  <div class="chart-box small">
+    <canvas id="pieChart"></canvas>
+  </div>
 </section>
 
 <section class="panel">
@@ -61,11 +65,8 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
-  getAuth,
-  signInWithEmailAndPassword,
-  signOut,
-  onAuthStateChanged,
-  createUserWithEmailAndPassword
+  getAuth, signInWithEmailAndPassword, signOut,
+  onAuthStateChanged, createUserWithEmailAndPassword
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const firebaseConfig = {
@@ -80,7 +81,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const API = "https://envirocore-backend.onrender.com";
-
 const el = id => document.getElementById(id);
 
 let uid = null;
@@ -88,15 +88,9 @@ let barChart = null;
 let pieChart = null;
 
 el("themeBtn").onclick = () => document.body.classList.toggle("dark");
-
-el("loginBtn").onclick = () =>
-  signInWithEmailAndPassword(auth, el("email").value, el("password").value);
-
-el("signupBtn").onclick = () =>
-  createUserWithEmailAndPassword(auth, el("email").value, el("password").value);
-
+el("loginBtn").onclick = () => signInWithEmailAndPassword(auth, el("email").value, el("password").value);
+el("signupBtn").onclick = () => createUserWithEmailAndPassword(auth, el("email").value, el("password").value);
 el("logoutBtn").onclick = () => signOut(auth);
-
 el("submitBtn").onclick = submit;
 el("clearBtn").onclick = clearAll;
 el("pdfBtn").onclick = downloadPDF;
@@ -121,7 +115,6 @@ onAuthStateChanged(auth, user => {
 
 async function submit() {
   if (!uid) return alert("Login first");
-
   const data = {
     name: el("name").value,
     electricity_kwh: +el("elec").value || 0,
@@ -129,13 +122,10 @@ async function submit() {
     paper_kg: +el("paper").value || 0,
     uid
   };
-
   if (!data.name) return alert("Enter building name");
 
   await fetch(API + "/building", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(data)
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data)
   });
 
   el("name").value = el("elec").value = el("water").value = el("paper").value = "";
@@ -152,68 +142,37 @@ async function load() {
   const res = await fetch(API + "/buildings?uid=" + uid);
   const data = await res.json();
 
-  el("list").innerHTML = data.map(b =>
-    `<div class="card">${b.name} — ${b.carbon.toFixed(1)} kg</div>`
-  ).join("");
+  el("list").innerHTML = data.map(b => `<div class="card">${b.name} — ${b.carbon.toFixed(1)} kg</div>`).join("");
 
   barChart?.destroy();
   pieChart?.destroy();
 
   barChart = new Chart(el("carbonChart"), {
     type: "bar",
+    options: { responsive: true, maintainAspectRatio: false },
     data: { labels: data.map(b => b.name), datasets: [{ label: "kg CO₂", data: data.map(b => b.carbon) }] }
   });
 
   pieChart = new Chart(el("pieChart"), {
     type: "pie",
+    options: { responsive: true, maintainAspectRatio: false },
     data: { labels: data.map(b => b.name), datasets: [{ data: data.map(b => b.carbon) }] }
   });
 
-  recommendations(data);
+  generateRecommendations(data);
 }
 
 function generateRecommendations(data) {
-  const total = data.reduce((sum, b) => sum + b.carbon, 0) || 0;
-
-  let html = `<div class="rec"><b>Total campus emissions:</b> ${total.toFixed(1)} kg CO₂</div><br>`;
-
-  data.forEach(b => {
-    let actions = [];
-    let save = 0;
-
-    // Smart suggestions
-    if (b.electricity_kwh > 100) {
-      const s = b.electricity_kwh * 0.15;
-      save += s;
-      actions.push(`💡 Switch to LED lights → save ${s.toFixed(1)} kg CO₂`);
-    }
-
-    if (b.water_liters > 500) {
-      const s = b.water_liters * 0.002 * 0.3;
-      save += s;
-      actions.push(`🚰 Install sensor taps → save ${s.toFixed(1)} kg CO₂`);
-    }
-
-    if (b.paper_kg > 10) {
-      const s = b.paper_kg * 1.5 * 0.4;
-      save += s;
-      actions.push(`📄 Reduce printing → save ${s.toFixed(1)} kg CO₂`);
-    }
-
-    const wasted = save;
-
-    html += `
-      <div class="rec">
-        <b>${b.name}</b><br>
-        Current: ${b.carbon.toFixed(1)} kg CO₂<br>
-        ${actions.length ? actions.join("<br>") : "✅ Already efficient"}<br>
-        <b>If you act:</b> reduce ${save.toFixed(1)} kg CO₂<br>
-        <b>If you don’t:</b> waste ${wasted.toFixed(1)} kg CO₂
-      </div><br>
-    `;
+  let total = data.reduce((s,b)=>s+b.carbon,0);
+  let html = `<div class="rec"><b>Total emissions:</b> ${total.toFixed(1)} kg CO₂</div>`;
+  data.forEach(b=>{
+    let save=0, actions=[];
+    if(b.electricity_kwh>100){ save+=b.electricity_kwh*0.15; actions.push("💡 Switch to LED"); }
+    if(b.water_liters>500){ save+=b.water_liters*0.002*0.3; actions.push("🚰 Install sensor taps"); }
+    if(b.paper_kg>10){ save+=b.paper_kg*1.5*0.4; actions.push("📄 Reduce printing"); }
+    html+=`<div class="rec"><b>${b.name}</b><br>${actions.join(", ")||"Efficient"}<br>Save: ${save.toFixed(1)} kg CO₂</div>`;
   });
-
-  document.getElementById("recommendations").innerHTML = html;
+  el("recommendations").innerHTML=html;
 }
 
 function downloadPDF() {
