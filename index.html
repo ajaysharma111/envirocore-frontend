@@ -172,27 +172,48 @@ async function load() {
   recommendations(data);
 }
 
-function recommendations(data) {
-  if (!data.length) {
-    el("recommendations").textContent = "No data yet.";
-    return;
-  }
+function generateRecommendations(data) {
+  const total = data.reduce((sum, b) => sum + b.carbon, 0) || 0;
 
-  el("recommendations").innerHTML = data.map(b => {
-    const save = b.carbon * 0.2;
-    return `
+  let html = `<div class="rec"><b>Total campus emissions:</b> ${total.toFixed(1)} kg CO₂</div><br>`;
+
+  data.forEach(b => {
+    let actions = [];
+    let save = 0;
+
+    // Smart suggestions
+    if (b.electricity_kwh > 100) {
+      const s = b.electricity_kwh * 0.15;
+      save += s;
+      actions.push(`💡 Switch to LED lights → save ${s.toFixed(1)} kg CO₂`);
+    }
+
+    if (b.water_liters > 500) {
+      const s = b.water_liters * 0.002 * 0.3;
+      save += s;
+      actions.push(`🚰 Install sensor taps → save ${s.toFixed(1)} kg CO₂`);
+    }
+
+    if (b.paper_kg > 10) {
+      const s = b.paper_kg * 1.5 * 0.4;
+      save += s;
+      actions.push(`📄 Reduce printing → save ${s.toFixed(1)} kg CO₂`);
+    }
+
+    const wasted = save;
+
+    html += `
       <div class="rec">
         <b>${b.name}</b><br>
-        Emissions: ${b.carbon.toFixed(1)} kg<br>
-        If you act → save ${save.toFixed(1)} kg<br>
-        If you ignore → waste ${save.toFixed(1)} kg
-        <ul>
-          <li>💡 Use LED & efficient HVAC</li>
-          <li>🚰 Sensor taps & leak repair</li>
-          <li>🖨 Reduce printing</li>
-        </ul>
-      </div>`;
-  }).join("");
+        Current: ${b.carbon.toFixed(1)} kg CO₂<br>
+        ${actions.length ? actions.join("<br>") : "✅ Already efficient"}<br>
+        <b>If you act:</b> reduce ${save.toFixed(1)} kg CO₂<br>
+        <b>If you don’t:</b> waste ${wasted.toFixed(1)} kg CO₂
+      </div><br>
+    `;
+  });
+
+  document.getElementById("recommendations").innerHTML = html;
 }
 
 function downloadPDF() {

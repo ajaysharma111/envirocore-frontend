@@ -10,3 +10,9 @@ button:hover{opacity:.85}
 .dark{background:#121212;color:white}
 .dark .panel{background:#1e1e1e}
 .dark .rec{background:#2e2e2e}
+canvas {
+  max-width: 600px;
+  max-height: 300px;
+  margin: 20px auto;
+  display: block;
+}
