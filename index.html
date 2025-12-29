@@ -201,14 +201,43 @@ function generateRecommendations(data) {
   el("recommendations").innerHTML = html;
 }
 
-function downloadPDF() {
+async function downloadPDF() {
   const { jsPDF } = window.jspdf;
-  const doc = new jsPDF();
-  const text = el("recommendations").innerText || "No data";
-  const lines = doc.splitTextToSize(text, 180);
-  doc.text(lines, 10, 10);
-  doc.save("envirocore.pdf");
+  const doc = new jsPDF("p", "mm", "a4");
+
+  let y = 10;
+
+  // ---- Title ----
+  doc.setFontSize(16);
+  doc.text("EnviroCore Report", 10, y);
+  y += 10;
+
+  // ---- Recommendations (clean text) ----
+  const raw = document.getElementById("recommendations").innerText || "";
+  const clean = raw.replace(/[^\x00-\x7F]/g, ""); // remove emojis/unicode
+
+  doc.setFontSize(10);
+  const lines = doc.splitTextToSize(clean, 180);
+  doc.text(lines, 10, y);
+  y += lines.length * 6 + 5;
+
+  // ---- Add Bar Chart ----
+  const barCanvas = document.getElementById("carbonChart");
+  const barImg = barCanvas.toDataURL("image/png", 1.0);
+  doc.addPage();
+  doc.text("Carbon Footprint Chart", 10, 10);
+  doc.addImage(barImg, "PNG", 10, 15, 180, 80);
+
+  // ---- Add Pie Chart ----
+  const pieCanvas = document.getElementById("pieChart");
+  const pieImg = pieCanvas.toDataURL("image/png", 1.0);
+  doc.addPage();
+  doc.text("Carbon Share Chart", 10, 10);
+  doc.addImage(pieImg, "PNG", 30, 20, 120, 120);
+
+  doc.save("envirocore-report.pdf");
 }
+
 
 async function exportExcel() {
   const res = await fetch(API + "/buildings?uid=" + uid);
