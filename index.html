@@ -163,18 +163,57 @@ async function load() {
 }
 
 function generateRecommendations(data) {
-  let total = data.reduce((s,b)=>s+b.carbon,0);
-  let html = `<div class="rec"><b>Total emissions:</b> ${total.toFixed(1)} kg CO₂</div>`;
-  data.forEach(b=>{
-    let save=0, actions=[];
-    if(b.electricity_kwh>100){ save+=b.electricity_kwh*0.15; actions.push("💡 Switch to LED"); }
-    if(b.water_liters>500){ save+=b.water_liters*0.002*0.3; actions.push("🚰 Install sensor taps"); }
-    if(b.paper_kg>10){ save+=b.paper_kg*1.5*0.4; actions.push("📄 Reduce printing"); }
-    html+=`<div class="rec"><b>${b.name}</b><br>${actions.join(", ")||"Efficient"}<br>Save: ${save.toFixed(1)} kg CO₂</div>`;
-  });
-  el("recommendations").innerHTML=html;
-}
+  const totalCampus = data.reduce((sum, b) => sum + b.carbon, 0);
 
+  let html = `
+    <div class="rec">
+      <b>Total Campus Emissions:</b> ${totalCampus.toFixed(1)} kg CO₂
+    </div><br>
+  `;
+
+  data.forEach(b => {
+    let actions = [];
+    let save = 0;
+
+    // Electricity
+    if (b.electricity_kwh > 100) {
+      const s = b.electricity_kwh * 0.5 * 0.20; // 20% of electricity carbon
+      save += s;
+      actions.push(`💡 Switch CFL → LED lighting (save ${s.toFixed(1)} kg CO₂)`);
+    }
+
+    // Water
+    if (b.water_liters > 500) {
+      const s = b.water_liters * 0.002 * 0.30; // 30% of water carbon
+      save += s;
+      actions.push(`🚰 Normal taps → Sensor taps (save ${s.toFixed(1)} kg CO₂)`);
+    }
+
+    // Paper
+    if (b.paper_kg > 10) {
+      const s = b.paper_kg * 1.5 * 0.40; // 40% of paper carbon
+      save += s;
+      actions.push(`📄 Paper printing → Digital docs (save ${s.toFixed(1)} kg CO₂)`);
+    }
+
+    const wasted = save;
+    const future = b.carbon + wasted;
+
+    html += `
+      <div class="rec">
+        <b>${b.name}</b><br>
+        Current Emissions: ${b.carbon.toFixed(1)} kg CO₂<br><br>
+
+        ${actions.length ? actions.join("<br>") : "✅ Already optimized — no major waste detected"}<br><br>
+
+        <b>If you take action:</b> You reduce ${save.toFixed(1)} kg CO₂ → New total ${(b.carbon - save).toFixed(1)} kg<br>
+        <b>If you don’t:</b> You waste ${wasted.toFixed(1)} kg CO₂ → Future total ${future.toFixed(1)} kg
+      </div><br>
+    `;
+  });
+
+  document.getElementById("recommendations").innerHTML = html;
+}
 function downloadPDF() {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
