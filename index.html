@@ -5,6 +5,8 @@
   <title>EnviroCore</title>
   <link rel="stylesheet" href="styles.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -51,6 +53,11 @@
   <div id="recommendations"></div>
 </section>
 
+<section class="panel">
+  <button id="pdfBtn">Download PDF</button>
+  <button id="excelBtn">Export Excel</button>
+</section>
+
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {
@@ -78,31 +85,20 @@ let barChart = null;
 let pieChartInstance = null;
 
 window.addEventListener("DOMContentLoaded", () => {
-  document.getElementById("themeBtn").onclick = () => document.body.classList.toggle("dark");
-
-  document.getElementById("loginBtn").onclick = loginUser;
-  document.getElementById("signupBtn").onclick = signupUser;
-  document.getElementById("logoutBtn").onclick = logoutUser;
-  document.getElementById("submitBtn").onclick = submitData;
-  document.getElementById("clearBtn").onclick = clearAll;
+  themeBtn.onclick = () => document.body.classList.toggle("dark");
+  loginBtn.onclick = loginUser;
+  signupBtn.onclick = signupUser;
+  logoutBtn.onclick = logoutUser;
+  submitBtn.onclick = submitData;
+  clearBtn.onclick = clearAll;
+  pdfBtn.onclick = downloadPDF;
+  excelBtn.onclick = exportExcel;
 
   onAuthStateChanged(auth, user => {
-    const status = document.getElementById("status");
-    const submitBtn = document.getElementById("submitBtn");
-    const clearBtn = document.getElementById("clearBtn");
-
-    if (user) {
-      status.textContent = `Logged in as ${user.email}`;
-      submitBtn.disabled = false;
-      clearBtn.style.display = "inline";
-      loadBuildings();
-    } else {
-      status.textContent = "Not logged in";
-      submitBtn.disabled = true;
-      clearBtn.style.display = "none";
-      document.getElementById("list").innerHTML = "";
-      document.getElementById("recommendations").innerHTML = "";
-    }
+    status.textContent = user ? `Logged in as ${user.email}` : "Not logged in";
+    submitBtn.disabled = !user;
+    clearBtn.style.display = user ? "inline" : "none";
+    if (user) loadBuildings();
   });
 });
 
@@ -110,18 +106,14 @@ async function signupUser() {
   try {
     await createUserWithEmailAndPassword(auth, email.value, password.value);
     alert("Account created!");
-  } catch (e) {
-    alert(e.message);
-  }
+  } catch (e) { alert(e.message); }
 }
 
 async function loginUser() {
   try {
     await signInWithEmailAndPassword(auth, email.value, password.value);
     alert("Login successful!");
-  } catch (e) {
-    alert(e.message);
-  }
+  } catch (e) { alert(e.message); }
 }
 
 async function logoutUser() {
@@ -162,9 +154,7 @@ async function loadBuildings() {
   const res = await fetch(`${API}/buildings`);
   const data = await res.json();
 
-  document.getElementById("list").innerHTML = data.map(b => `
-    <div class="card"><b>${b.name}</b><br>${b.carbon.toFixed(1)} kg CO₂</div>
-  `).join("");
+  list.innerHTML = data.map(b => `<div class="card"><b>${b.name}</b><br>${b.carbon.toFixed(1)} kg CO₂</div>`).join("");
 
   const labels = data.map(b => b.name);
   const values = data.map(b => b.carbon);
@@ -172,33 +162,37 @@ async function loadBuildings() {
   barChart?.destroy();
   pieChartInstance?.destroy();
 
-  barChart = new Chart(document.getElementById("carbonChart"), {
-    type: "bar",
-    data: { labels, datasets: [{ label: "kg CO₂", data: values }] }
-  });
-
-  pieChartInstance = new Chart(document.getElementById("pieChart"), {
-    type: "pie",
-    data: { labels, datasets: [{ data: values }] }
-  });
+  barChart = new Chart(carbonChart, { type: "bar", data: { labels, datasets:[{label:"kg CO₂",data:values}]}});
+  pieChartInstance = new Chart(pieChart, { type: "pie", data: { labels, datasets:[{data:values}]} });
 
   generateRecommendations(data);
 }
 
 function generateRecommendations(data) {
-  const total = data.reduce((s, b) => s + b.carbon, 0) || 1;
-
-  document.getElementById("recommendations").innerHTML = data.map(b => {
-    const share = (b.carbon / total * 100).toFixed(1);
-    const save = b.carbon * 0.2;
-    return `
-      <div class="rec">
-        <b>${b.name}</b> contributes ${share}%<br>
-        ⚡ LED + HVAC saves ${save.toFixed(0)} kg<br>
-        → ${b.carbon.toFixed(0)} → ${(b.carbon - save).toFixed(0)} kg<br>
-        Next year ≈ ${(b.carbon * 1.05).toFixed(0)} kg
-      </div>`;
+  const total = data.reduce((s,b)=>s+b.carbon,0)||1;
+  recommendations.innerHTML = data.map(b=>{
+    const save=b.carbon*0.2;
+    return `<div class="rec">
+      <b>${b.name}</b><br>
+      Save ${save.toFixed(0)} kg by switching to LED<br>
+      → ${(b.carbon-save).toFixed(0)} kg
+    </div>`;
   }).join("");
+}
+
+function downloadPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  doc.text(recommendations.innerText || "No data", 10, 10);
+  doc.save("envirocore.pdf");
+}
+
+async function exportExcel() {
+  const data = await (await fetch(`${API}/buildings`)).json();
+  const ws = XLSX.utils.json_to_sheet(data);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Buildings");
+  XLSX.writeFile(wb, "envirocore.xlsx");
 }
 </script>
 
