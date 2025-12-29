@@ -60,8 +60,13 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, createUserWithEmailAndPassword }
-from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  createUserWithEmailAndPassword
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDdon6u4Rz37tWg1eKLtxkmMGpCjn4grr8",
@@ -76,117 +81,130 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const API = "https://envirocore-backend.onrender.com";
 
+const el = id => document.getElementById(id);
+
 let uid = null;
 let barChart = null;
 let pieChart = null;
 
-document.getElementById("themeBtn").onclick = () => document.body.classList.toggle("dark");
-document.getElementById("loginBtn").onclick = () => signInWithEmailAndPassword(auth, email.value, password.value);
-document.getElementById("signupBtn").onclick = () => createUserWithEmailAndPassword(auth, email.value, password.value);
-document.getElementById("logoutBtn").onclick = () => signOut(auth);
-document.getElementById("submitBtn").onclick = submit;
-document.getElementById("clearBtn").onclick = clearAll;
-document.getElementById("pdfBtn").onclick = downloadPDF;
-document.getElementById("excelBtn").onclick = exportExcel;
+el("themeBtn").onclick = () => document.body.classList.toggle("dark");
+
+el("loginBtn").onclick = () =>
+  signInWithEmailAndPassword(auth, el("email").value, el("password").value);
+
+el("signupBtn").onclick = () =>
+  createUserWithEmailAndPassword(auth, el("email").value, el("password").value);
+
+el("logoutBtn").onclick = () => signOut(auth);
+
+el("submitBtn").onclick = submit;
+el("clearBtn").onclick = clearAll;
+el("pdfBtn").onclick = downloadPDF;
+el("excelBtn").onclick = exportExcel;
 
 onAuthStateChanged(auth, user => {
   if (user) {
     uid = user.uid;
-    status.textContent = "Logged in as " + user.email;
-    submitBtn.disabled = false;
-    clearBtn.style.display = "inline";
+    el("status").textContent = "Logged in as " + user.email;
+    el("submitBtn").disabled = false;
+    el("clearBtn").style.display = "inline";
     load();
   } else {
     uid = null;
-    status.textContent = "Not logged in";
-    submitBtn.disabled = true;
-    clearBtn.style.display = "none";
-    list.innerHTML = recommendations.innerHTML = "";
+    el("status").textContent = "Not logged in";
+    el("submitBtn").disabled = true;
+    el("clearBtn").style.display = "none";
+    el("list").innerHTML = "";
+    el("recommendations").innerHTML = "";
   }
 });
 
 async function submit() {
-  const d = {
-    name: name.value,
-    electricity_kwh:+elec.value,
-    water_liters:+water.value,
-    paper_kg:+paper.value,
+  if (!uid) return alert("Login first");
+
+  const data = {
+    name: el("name").value,
+    electricity_kwh: +el("elec").value || 0,
+    water_liters: +el("water").value || 0,
+    paper_kg: +el("paper").value || 0,
     uid
   };
 
+  if (!data.name) return alert("Enter building name");
+
   await fetch(API + "/building", {
-    method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body:JSON.stringify(d)
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
   });
 
-  name.value = elec.value = water.value = paper.value = "";
+  el("name").value = el("elec").value = el("water").value = el("paper").value = "";
   load();
 }
 
 async function clearAll() {
-  await fetch(API + "/buildings?uid=" + uid, { method:"DELETE" });
+  if (!confirm("Clear all data?")) return;
+  await fetch(API + "/buildings?uid=" + uid, { method: "DELETE" });
   load();
 }
 
 async function load() {
-  const data = await (await fetch(API + "/buildings?uid=" + uid)).json();
+  const res = await fetch(API + "/buildings?uid=" + uid);
+  const data = await res.json();
 
-  list.innerHTML = data.map(b => `<div class="card">${b.name} — ${b.carbon.toFixed(1)} kg</div>`).join("");
+  el("list").innerHTML = data.map(b =>
+    `<div class="card">${b.name} — ${b.carbon.toFixed(1)} kg</div>`
+  ).join("");
 
   barChart?.destroy();
   pieChart?.destroy();
 
-  barChart = new Chart(carbonChart, {
-    type:"bar",
-    data:{ labels:data.map(b=>b.name), datasets:[{label:"kg CO₂", data:data.map(b=>b.carbon)}]}
+  barChart = new Chart(el("carbonChart"), {
+    type: "bar",
+    data: { labels: data.map(b => b.name), datasets: [{ label: "kg CO₂", data: data.map(b => b.carbon) }] }
   });
 
-  pieChart = new Chart(pieChart, {
-    type:"pie",
-    data:{ labels:data.map(b=>b.name), datasets:[{data:data.map(b=>b.carbon)}]}
+  pieChart = new Chart(el("pieChart"), {
+    type: "pie",
+    data: { labels: data.map(b => b.name), datasets: [{ data: data.map(b => b.carbon) }] }
   });
 
-  generateRecommendations(data);
+  recommendations(data);
 }
 
-function generateRecommendations(data) {
+function recommendations(data) {
   if (!data.length) {
-    recommendations.innerHTML = "No data yet.";
+    el("recommendations").textContent = "No data yet.";
     return;
   }
 
-  recommendations.innerHTML = data.map(b => {
-    const elecSave = b.electricity_kwh * 0.2 * 0.5;
-    const waterSave = b.water_liters * 0.2 * 0.002;
-    const paperSave = b.paper_kg * 0.2 * 1.5;
-    const totalSave = elecSave + waterSave + paperSave;
-
+  el("recommendations").innerHTML = data.map(b => {
+    const save = b.carbon * 0.2;
     return `
       <div class="rec">
         <b>${b.name}</b><br>
-        Emissions: ${b.carbon.toFixed(1)} kg CO₂<br>
-        If you act → save ${totalSave.toFixed(1)} kg<br>
-        If you ignore → waste ${totalSave.toFixed(1)} kg
+        Emissions: ${b.carbon.toFixed(1)} kg<br>
+        If you act → save ${save.toFixed(1)} kg<br>
+        If you ignore → waste ${save.toFixed(1)} kg
         <ul>
-          <li>💡 LED lighting & efficient HVAC</li>
+          <li>💡 Use LED & efficient HVAC</li>
           <li>🚰 Sensor taps & leak repair</li>
           <li>🖨 Reduce printing</li>
         </ul>
-      </div>
-    `;
+      </div>`;
   }).join("");
 }
 
 function downloadPDF() {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF();
-  doc.text(list.innerText,10,10);
+  doc.text(el("recommendations").innerText || "No data", 10, 10);
   doc.save("envirocore.pdf");
 }
 
 async function exportExcel() {
-  const data = await (await fetch(API + "/buildings?uid=" + uid)).json();
+  const res = await fetch(API + "/buildings?uid=" + uid);
+  const data = await res.json();
   const ws = XLSX.utils.json_to_sheet(data);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, "Buildings");
