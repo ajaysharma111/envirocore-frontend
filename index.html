@@ -73,6 +73,8 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+
+// 🔹 Production backend
 const API = "https://envirocore-backend.onrender.com";
 
 let barChart = null;
@@ -177,6 +179,7 @@ async function loadBuildings() {
 
 function generateRecommendations(data) {
   const total = data.reduce((s, b) => s + b.carbon, 0) || 1;
+
   document.getElementById("recommendations").innerHTML = data.map(b => {
     const share = (b.carbon / total * 100).toFixed(1);
     const save = b.carbon * 0.2;
