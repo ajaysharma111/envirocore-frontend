@@ -12,9 +12,9 @@ EnviroCore is a web-based sustainability dashboard designed to help educational 
 
 Frontend • HTML, CSS, JavaScript • Chart.js (for data visualization) • jsPDF (PDF export) • SheetJS (Excel export)
 
-Backend • Node.js + Express (REST API) • Hosted on Google Cloud Run
+Backend • Node.js + Express (REST API) • Hosted on Google Cloud Run (via Render)
 
-Authentication & Hosting • Firebase Authentication • Firebase Hosting (frontend)
+Authentication • Firebase Authentication 
 
 ⸻
 
